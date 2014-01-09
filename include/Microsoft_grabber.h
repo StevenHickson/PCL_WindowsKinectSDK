@@ -72,11 +72,11 @@ namespace pcl
 		//define callback signature typedefs
 		typedef void (sig_cb_microsoft_image) (const boost::shared_ptr<const pcl::PointCloud<pcl::PointXYZRGB> >&);
 		typedef void (sig_cb_microsoft_depth_image) (const boost::shared_ptr<const pcl::PointCloud<pcl::PointXYZ> >&);
-		typedef void (sig_cb_microsoft_ir_image) (const boost::shared_ptr<const pcl::PointCloud<pcl::PointXYZI> >&);
+		/*typedef void (sig_cb_microsoft_ir_image) (const boost::shared_ptr<const pcl::PointCloud<pcl::PointXYZI> >&);
 		typedef void (sig_cb_microsoft_point_cloud) (const boost::shared_ptr<const pcl::PointCloud<pcl::PointXYZ> >&);
 		typedef void (sig_cb_microsoft_point_cloud_rgb) (const boost::shared_ptr<const pcl::PointCloud<pcl::PointXYZRGB> >&);
 		typedef void (sig_cb_microsoft_point_cloud_rgba) (const boost::shared_ptr<const pcl::PointCloud<pcl::PointXYZRGBA> >&);
-		typedef void (sig_cb_microsoft_point_cloud_i) (const boost::shared_ptr<const pcl::PointCloud<pcl::PointXYZI> >&);
+		typedef void (sig_cb_microsoft_point_cloud_i) (const boost::shared_ptr<const pcl::PointCloud<pcl::PointXYZI> >&);*/
 
 		MicrosoftGrabber (const int instance = 0);
 		//const Mode& depth_mode = OpenNI_Default_Mode,
@@ -120,11 +120,11 @@ namespace pcl
 	protected:
 		boost::signals2::signal<sig_cb_microsoft_image>* image_signal_;
 		boost::signals2::signal<sig_cb_microsoft_depth_image>* depth_image_signal_;
-		boost::signals2::signal<sig_cb_microsoft_ir_image>* ir_image_signal_;
+		/*boost::signals2::signal<sig_cb_microsoft_ir_image>* ir_image_signal_;
 		boost::signals2::signal<sig_cb_microsoft_point_cloud>* point_cloud_signal_;
 		boost::signals2::signal<sig_cb_microsoft_point_cloud_i>* point_cloud_i_signal_;
 		boost::signals2::signal<sig_cb_microsoft_point_cloud_rgb>* point_cloud_rgb_signal_;
-		boost::signals2::signal<sig_cb_microsoft_point_cloud_rgba>* point_cloud_rgba_signal_;
+		boost::signals2::signal<sig_cb_microsoft_point_cloud_rgba>* point_cloud_rgba_signal_;*/
 
 		HANDLE hColorStream, hDepthStream, hInfraredStream;
 		HANDLE hDepthFrameEvent, hColorFrameEvent, hInfraredFrameEvent, hSkeletonEvent, hStopEvent, hKinectThread;
@@ -140,7 +140,7 @@ namespace pcl
 
 		void Release();
 		void GotColor();
-		//void GotDepth();
+		void GotDepth();
 		//void GotInfrared();
 		//void GotSkeleton();
 		void StartVideoCapture();

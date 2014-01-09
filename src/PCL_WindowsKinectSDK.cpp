@@ -19,16 +19,16 @@ using namespace pcl;
 class SimpleMicrosoftViewer
 {
 public:
-	/*SimpleMicrosoftViewer () : viewer ("PCL OpenNI Viewer") {}
+	SimpleMicrosoftViewer () : viewer ("PCL Microsoft Viewer") {}
 
 	void cloud_cb_ (const pcl::PointCloud<pcl::PointXYZRGB>::ConstPtr &cloud)
 	{
-		cout << "Frame!!" << endl;
+		//cout << "Frame!!" << endl;
 		if (!viewer.wasStopped())
 			viewer.showCloud (cloud);
-	}*/
+	}
 
-	void cloud_cb_ (const pcl::PointCloud<pcl::PointXYZRGB>::ConstPtr &cloud)
+	/*void cloud_cb_ (const pcl::PointCloud<pcl::PointXYZRGB>::ConstPtr &cloud)
 	{
 		static unsigned count = 0;
 		static double last = pcl::getTime ();
@@ -39,7 +39,7 @@ public:
 			count = 0;
 			last = now;
 		}
-	}
+	}*/
 
 	void run ()
 	{
@@ -53,9 +53,8 @@ public:
 		my_interface->registerCallback (f);
 
 		my_interface->start ();
-
-		//while (!viewer.wasStopped())
-		while(true)
+		Sleep(30);
+		while (!viewer.wasStopped())
 		{
 			boost::this_thread::sleep (boost::posix_time::seconds (1));
 		}
@@ -63,7 +62,7 @@ public:
 		my_interface->stop ();
 	}
 
-	//pcl::visualization::CloudViewer viewer;
+	pcl::visualization::CloudViewer viewer;
 };
 
 int

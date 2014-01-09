@@ -59,7 +59,7 @@ namespace pcl {
 		colorRes = depthRes = NUI_IMAGE_RESOLUTION_640x480;
 
 		if (num > instance) {
-			hr = NuiCreateSensorByIndex(num - 1, &kinectInstance);
+			hr = NuiCreateSensorByIndex(instance, &kinectInstance);
 			if ( FAILED( hr ) ) {
 				throw exception("Failed to connect to Kinect sensor");
 			}
@@ -78,13 +78,13 @@ namespace pcl {
 			throw exception("Failed to Find a Kinect sensor");
 
 		// create callback signals
+		image_signal_             = createSignal<sig_cb_microsoft_image> ();
 		depth_image_signal_    = createSignal<sig_cb_microsoft_depth_image> ();
-		ir_image_signal_       = createSignal<sig_cb_microsoft_ir_image> ();
+		/*ir_image_signal_       = createSignal<sig_cb_microsoft_ir_image> ();
 		point_cloud_signal_    = createSignal<sig_cb_microsoft_point_cloud> ();
 		point_cloud_i_signal_  = createSignal<sig_cb_microsoft_point_cloud_i> ();
-		image_signal_             = createSignal<sig_cb_microsoft_image> ();
 		point_cloud_rgb_signal_   = createSignal<sig_cb_microsoft_point_cloud_rgb> ();
-		point_cloud_rgba_signal_  = createSignal<sig_cb_microsoft_point_cloud_rgba> ();
+		point_cloud_rgba_signal_  = createSignal<sig_cb_microsoft_point_cloud_rgba> ();*/
 	}
 
 	void MicrosoftGrabber::start() {
@@ -95,7 +95,7 @@ namespace pcl {
 		hStopEvent = CreateEvent( NULL, FALSE, FALSE, NULL );
 		hKinectThread = CreateThread( NULL, 0, (LPTHREAD_START_ROUTINE)&ProcessThread, this, 0, NULL );
 		//boost::this_thread::sleep (boost::posix_time::seconds (1));
-		//unblock_signals();
+		unblock_signals();
 	}
 
 	void MicrosoftGrabber::stop() {
@@ -183,7 +183,7 @@ namespace pcl {
 				quit = true;
 				continue;
 			case WAIT_OBJECT_0 + 1:
-				//GotDepth();
+				GotDepth();
 				break;
 			case WAIT_OBJECT_0 + 2:
 				GotColor();
@@ -250,7 +250,7 @@ namespace pcl {
 		}
 		//convert here
 		if (image_signal_->num_slots () > 0) {
-			cout << "img signal num slot!" << endl;
+			//cout << "img signal num slot!" << endl;
 			image_signal_->operator()(convertToRGBPointCloud(pImageFrame));
 		}
 		/*if (point_cloud_rgb_signal_->num_slots() > 0) {
@@ -295,9 +295,10 @@ namespace pcl {
 					pOut->z = 0;
 					if (count <= 0) {
 						loop++;
-						cout << loop << endl;
-						pOut += multiplier;
-						count = safeWidth;
+						if(loop < imgHeight) {
+							pOut += multiplier;
+							count = safeWidth;
+						}
 					} else {
 						--pOut;
 						--count;
@@ -314,5 +315,70 @@ namespace pcl {
 			return (cloud);
 	}
 
+#pragma endregion
+
+	//Depth Functions
+#pragma region Depth
+
+	void MicrosoftGrabber::GotDepth() {
+		NUI_IMAGE_FRAME pImageFrame;
+		INuiFrameTexture * pTexture = NULL;
+		HRESULT hr = kinectInstance->NuiImageStreamGetNextFrame(hDepthStream,0,&pImageFrame );
+		if ( FAILED( hr ) ) {
+			throw exception("Could not get next depth frame from kinect");
+		}
+		hr = kinectInstance->NuiImageFrameGetDepthImagePixelFrameTexture(hDepthStream, &pImageFrame, &m_nearMode, &pTexture);
+		if ( FAILED( hr ) ) {
+			throw exception("Could not get extended depth data from kinect");
+		}
+		//No longer needed I think
+		//INuiFrameTexture * pTexture = pImageFrame.pFrameTexture;
+		NUI_LOCKED_RECT LockedRect;
+		pTexture->LockRect( 0, &LockedRect, NULL, 0 );
+		if ( LockedRect.Pitch != 0 )
+		{
+			m_depthUpdated = false;
+			//mutexing here
+			/*m_depthSemaphore.Wait(0);  // clear semaphore
+			m_depthMutex.Lock();
+			m_depthTime = pImageFrame.liTimeStamp.QuadPart;
+			m_depth.Reset(depthWidth,depthHeight);
+			//BYTE * pBuffer = (BYTE*) LockedRect.pBits;
+			// put the bits into the image (flipped horizontally on the fly)
+			blepo::ImgInt::Iterator pOut = m_depth.Begin(depthWidth-1,0);
+			blepo::ImgBgr::Iterator pOutPerson;
+			NUI_DEPTH_IMAGE_PIXEL *pBuffer =  (NUI_DEPTH_IMAGE_PIXEL *) LockedRect.pBits;
+			if(m_person) {
+			m_depthwPerson.Reset(depthWidth,depthHeight);
+			pOutPerson = m_depthwPerson.Begin(depthWidth-1,0);
+			}
+			for( int y = 0 ; y < depthHeight ; y++ )
+			{
+			for( int x = 0 ; x < depthWidth ; x++ )
+			{
+			if(m_person) {
+			blepo::Bgr pixel;
+			//ShortToBgr_Depth( *pBufferRun, &pixel );
+			ShortToBgr_Depth( pBuffer->depth, pBuffer->playerIndex, &pixel );
+			*pOutPerson-- = pixel;
+			}
+			//USHORT RealDepth;
+			//RealDepth = *pBufferRun++ >> 3;
+			//*pOut-- = (int)RealDepth;
+			*pOut-- = (int)pBuffer->depth;
+			pBuffer++;
+			}
+			pOut += (depthWidth << 1);
+			if(m_person) pOutPerson += (depthWidth << 1);
+			}
+			}
+			m_depthMutex.Unlock();
+			m_depthSemaphore.Signal();  // signal semaphore
+			*/
+			// We're done with the texture so unlock it
+			pTexture->UnlockRect(0);
+			kinectInstance->NuiImageStreamReleaseFrame(hDepthStream, &pImageFrame );
+		}
+	}
 #pragma endregion
 };
