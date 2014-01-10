@@ -45,6 +45,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307 USA
 #include <NuiSkeleton.h>
 #include <NuiSensor.h>
 
+#include <opencv2/opencv.hpp>
+
 namespace pcl
 {
 	struct PointXYZ;
@@ -52,6 +54,9 @@ namespace pcl
 	struct PointXYZRGBA;
 	struct PointXYZI;
 	template <typename T> class PointCloud;
+	struct ImgRGB {
+		cv::Mat img;
+	};
 
 	/** \brief Grabber for OpenNI devices (i.e., Primesense PSDK, Microsoft Kinect, Asus XTion Pro/Live)
 	* \author Nico Blodow <blodow@cs.tum.edu>, Suat Gedikli <gedikli@willowgarage.com>
@@ -70,8 +75,8 @@ namespace pcl
 		} Mode;
 
 		//define callback signature typedefs
-		typedef void (sig_cb_microsoft_image) (const boost::shared_ptr<const pcl::PointCloud<pcl::PointXYZRGB> >&);
-		typedef void (sig_cb_microsoft_depth_image) (const boost::shared_ptr<const pcl::PointCloud<pcl::PointXYZ> >&);
+		typedef void (sig_cb_microsoft_image) (const boost::shared_ptr<const cv::Mat> &);
+		typedef void (sig_cb_microsoft_depth_image) (const boost::shared_ptr<const cv::Mat> &);
 		/*typedef void (sig_cb_microsoft_ir_image) (const boost::shared_ptr<const pcl::PointCloud<pcl::PointXYZI> >&);
 		typedef void (sig_cb_microsoft_point_cloud) (const boost::shared_ptr<const pcl::PointCloud<pcl::PointXYZ> >&);
 		typedef void (sig_cb_microsoft_point_cloud_rgb) (const boost::shared_ptr<const pcl::PointCloud<pcl::PointXYZRGB> >&);
@@ -148,16 +153,9 @@ namespace pcl
 		//void StartAudioCapture();
 		void StartInfraredCapture();
 		bool GetCameraSettings();
-		/** \brief Convert a Depth image to a pcl::PointCloud<pcl::PointXYZ>
-		* \param[in] depth the depth image to convert
-		*/
-		/*boost::shared_ptr<pcl::PointCloud<pcl::PointXYZ> >
-			convertToXYZPointCloud (const boost::shared_ptr<NUI_IMAGE_FRAME> &depth) const;*/
-		/** \brief Convert a Depth image to a pcl::PointCloud<pcl::PointXYZ>
-		* \param[in] depth the depth image to convert
-		*/
-		boost::shared_ptr<pcl::PointCloud<pcl::PointXYZRGB> >
-			convertToRGBPointCloud (const NUI_IMAGE_FRAME &color) const;
+		
+		boost::shared_ptr<cv::Mat> convertToRGBMat (const NUI_IMAGE_FRAME &color) const;
+		boost::shared_ptr<cv::Mat> convertTo32SMat (INuiFrameTexture *texture) const;
 		/** \brief Convert a Depth + RGB image pair to a pcl::PointCloud<PointT>
 		* \param[in] image the RGB image to convert
 		* \param[in] depth_image the depth image to convert

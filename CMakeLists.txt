@@ -1,10 +1,14 @@
 cmake_minimum_required(VERSION 2.8 FATAL_ERROR)
 
+
 project(PCL_WindowsKinectSDK)
 
 add_subdirectory(src)
 
+include_directories(C:/opencv/build)
+
 find_package(PCL 1.7 REQUIRED)
+find_package( OpenCV REQUIRED )
 
 include_directories(${PCL_INCLUDE_DIRS})
 include_directories(C:/blepo/external64/Microsoft/Kinect)
@@ -26,4 +30,4 @@ list(REMOVE_DUPLICATES PCL_WindowsKinectSDK_INCLUDE_DIRS)
 
 include_directories(${PCL_WindowsKinectSDK_INCLUDE_DIRS})
 add_executable (PCL_WindowsKinectSDK ${PCL_WindowsKinectSDK_SOURCES})
-target_link_libraries (PCL_WindowsKinectSDK ${PCL_LIBRARIES} Kinect10.lib)
+target_link_libraries (PCL_WindowsKinectSDK ${PCL_LIBRARIES} ${OpenCV_LIBS} Kinect10.lib)

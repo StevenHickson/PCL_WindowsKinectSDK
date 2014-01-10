@@ -12,20 +12,24 @@
 #include <NuiKinectFusionDepthProcessor.h>
 #include <NuiKinectFusionVolume.h>*/
 
+#include <opencv2/opencv.hpp>
+#include <opencv2/highgui/highgui.hpp>
 
 using namespace std;
 using namespace pcl;
+using namespace cv;
 
 class SimpleMicrosoftViewer
 {
 public:
-	SimpleMicrosoftViewer () : viewer ("PCL Microsoft Viewer") {}
+	//SimpleMicrosoftViewer () : viewer ("PCL Microsoft Viewer") {}
 
-	void cloud_cb_ (const pcl::PointCloud<pcl::PointXYZRGB>::ConstPtr &cloud)
+	void img_cb_ (const boost::shared_ptr<const cv::Mat> &img)
 	{
-		//cout << "Frame!!" << endl;
-		if (!viewer.wasStopped())
-			viewer.showCloud (cloud);
+		/*if (!viewer.wasStopped())
+			viewer.showCloud (cloud);*/
+		imshow("image", *img);
+		waitKey(1);
 	}
 
 	/*void cloud_cb_ (const pcl::PointCloud<pcl::PointXYZRGB>::ConstPtr &cloud)
@@ -47,14 +51,14 @@ public:
 		pcl::Grabber* my_interface = new pcl::MicrosoftGrabber();
 
 		// make callback function from member function
-		boost::function<void (const pcl::PointCloud<pcl::PointXYZRGB>::ConstPtr&)> f =
-			boost::bind (&SimpleMicrosoftViewer::cloud_cb_, this, _1);
+		boost::function<void (const boost::shared_ptr<const Mat_<Vec3b>>&)> f =
+			boost::bind (&SimpleMicrosoftViewer::img_cb_, this, _1);
 
 		my_interface->registerCallback (f);
 
 		my_interface->start ();
 		Sleep(30);
-		while (!viewer.wasStopped())
+		while (true)
 		{
 			boost::this_thread::sleep (boost::posix_time::seconds (1));
 		}
@@ -62,7 +66,7 @@ public:
 		my_interface->stop ();
 	}
 
-	pcl::visualization::CloudViewer viewer;
+	//pcl::visualization::CloudViewer viewer;
 };
 
 int

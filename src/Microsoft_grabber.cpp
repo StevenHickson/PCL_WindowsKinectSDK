@@ -23,6 +23,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307 USA
 #include "Microsoft_grabber.h"
 
 using namespace std;
+using namespace cv;
 
 DWORD ProcessThread(LPVOID pParam) {
 	pcl::MicrosoftGrabber *p = (pcl::MicrosoftGrabber*) pParam;
@@ -251,31 +252,18 @@ namespace pcl {
 		//convert here
 		if (image_signal_->num_slots () > 0) {
 			//cout << "img signal num slot!" << endl;
-			image_signal_->operator()(convertToRGBPointCloud(pImageFrame));
+			image_signal_->operator()(convertToRGBMat(pImageFrame));
 		}
-		/*if (point_cloud_rgb_signal_->num_slots() > 0) {
-		cout << "cloud signal num slot!" << endl;
-		point_cloud_rgb_signal_->operator()(convertToRGBPointCloud(pImageFrame));
-		}*/
 		kinectInstance->NuiImageStreamReleaseFrame( hColorStream, &pImageFrame );
 	}
 
-	//template <typename PointT> typename pcl::PointCloud<PointT>::Ptr 
-	pcl::PointCloud<pcl::PointXYZRGB>::Ptr
-		MicrosoftGrabber::convertToRGBPointCloud (const NUI_IMAGE_FRAME &pImageFrame) const {
+	boost::shared_ptr<cv::Mat>
+		MicrosoftGrabber::convertToRGBMat (const NUI_IMAGE_FRAME &pImageFrame) const {
 			INuiFrameTexture * pTexture = pImageFrame.pFrameTexture;
 			NUI_LOCKED_RECT LockedRect;
 			pTexture->LockRect( 0, &LockedRect, NULL, 0 );
 
-			boost::shared_ptr<pcl::PointCloud<PointXYZRGB> > cloud (new pcl::PointCloud<PointXYZRGB>);
-
-			cloud->header.frame_id = "/microsoft_rgb_optical_frame";
-			cloud->height = std::max (imgHeight, depthHeight);
-			cloud->width = std::max (imgWidth, depthWidth);
-			cloud->is_dense = true;
-
-			cloud->points.resize (cloud->height * cloud->width);
-
+			boost::shared_ptr<Mat> img (new Mat(imgHeight,imgWidth,CV_8UC3));
 			if ( LockedRect.Pitch != 0 ) //should be in this if statement otherwise erronous info
 			{
 				//mapper->MapColorFrameToDepthFrame(NUI_IMAGE_TYPE_COLOR, colorRes, depthRes, 
@@ -283,16 +271,13 @@ namespace pcl {
 				//Get Image info and put it into new image (weird arithmetic is to flip the image on the fly)
 				BYTE * pBuffer = (BYTE*) LockedRect.pBits;
 				int safeWidth = imgWidth - 1, count = safeWidth, loop = 0, multiplier = (imgWidth << 1) - 1;
-				PointCloud<PointXYZRGB>::iterator pOut = cloud->begin();
+				Mat_<Vec3b>::iterator pOut = img->begin<Vec3b>();
 				pOut += count;
 				while(loop < imgHeight) {
-					pOut->b = *pBuffer++;
-					pOut->g = *pBuffer++;
-					pOut->r = *pBuffer++;
-					pOut->a = *pBuffer++;
-					pOut->x = count;
-					pOut->y = loop;
-					pOut->z = 0;
+					(*pOut)[0] = *pBuffer++;
+					(*pOut)[1] = *pBuffer++;
+					(*pOut)[2] = *pBuffer++;
+					pBuffer++;
 					if (count <= 0) {
 						loop++;
 						if(loop < imgHeight) {
@@ -307,12 +292,7 @@ namespace pcl {
 			}
 			// We're done with the texture so unlock it
 			pTexture->UnlockRect(0);
-			cloud->sensor_origin_.setZero ();
-			cloud->sensor_orientation_.w () = 1.0f;
-			cloud->sensor_orientation_.x () = 0.0f;
-			cloud->sensor_orientation_.y () = 0.0f;
-			cloud->sensor_orientation_.z () = 0.0f;  
-			return (cloud);
+			return (img);
 	}
 
 #pragma endregion
@@ -322,7 +302,7 @@ namespace pcl {
 
 	void MicrosoftGrabber::GotDepth() {
 		NUI_IMAGE_FRAME pImageFrame;
-		INuiFrameTexture * pTexture = NULL;
+		INuiFrameTexture *pTexture = NULL;
 		HRESULT hr = kinectInstance->NuiImageStreamGetNextFrame(hDepthStream,0,&pImageFrame );
 		if ( FAILED( hr ) ) {
 			throw exception("Could not get next depth frame from kinect");
@@ -331,54 +311,38 @@ namespace pcl {
 		if ( FAILED( hr ) ) {
 			throw exception("Could not get extended depth data from kinect");
 		}
-		//No longer needed I think
-		//INuiFrameTexture * pTexture = pImageFrame.pFrameTexture;
-		NUI_LOCKED_RECT LockedRect;
-		pTexture->LockRect( 0, &LockedRect, NULL, 0 );
-		if ( LockedRect.Pitch != 0 )
-		{
-			m_depthUpdated = false;
-			//mutexing here
-			/*m_depthSemaphore.Wait(0);  // clear semaphore
-			m_depthMutex.Lock();
-			m_depthTime = pImageFrame.liTimeStamp.QuadPart;
-			m_depth.Reset(depthWidth,depthHeight);
-			//BYTE * pBuffer = (BYTE*) LockedRect.pBits;
-			// put the bits into the image (flipped horizontally on the fly)
-			blepo::ImgInt::Iterator pOut = m_depth.Begin(depthWidth-1,0);
-			blepo::ImgBgr::Iterator pOutPerson;
-			NUI_DEPTH_IMAGE_PIXEL *pBuffer =  (NUI_DEPTH_IMAGE_PIXEL *) LockedRect.pBits;
-			if(m_person) {
-			m_depthwPerson.Reset(depthWidth,depthHeight);
-			pOutPerson = m_depthwPerson.Begin(depthWidth-1,0);
-			}
-			for( int y = 0 ; y < depthHeight ; y++ )
+
+		if (depth_image_signal_->num_slots () > 0) {
+			//cout << "img signal num slot!" << endl;
+			depth_image_signal_->operator()(convertTo32SMat(pTexture));
+		}
+		kinectInstance->NuiImageStreamReleaseFrame(hDepthStream, &pImageFrame );
+	}
+
+	boost::shared_ptr<cv::Mat>
+		MicrosoftGrabber::convertTo32SMat (INuiFrameTexture *pTexture) const {
+			NUI_LOCKED_RECT LockedRect;
+			pTexture->LockRect( 0, &LockedRect, NULL, 0 );
+			boost::shared_ptr<Mat> img (new Mat(depthHeight,depthWidth,CV_32S));
+			if ( LockedRect.Pitch != 0 )
 			{
-			for( int x = 0 ; x < depthWidth ; x++ )
-			{
-			if(m_person) {
-			blepo::Bgr pixel;
-			//ShortToBgr_Depth( *pBufferRun, &pixel );
-			ShortToBgr_Depth( pBuffer->depth, pBuffer->playerIndex, &pixel );
-			*pOutPerson-- = pixel;
+				//m_depthTime = pImageFrame.liTimeStamp.QuadPart;
+				Mat_<int>::iterator pOut = img->begin<int>();
+				pOut += depthWidth - 1;
+				NUI_DEPTH_IMAGE_PIXEL *pBuffer =  (NUI_DEPTH_IMAGE_PIXEL *) LockedRect.pBits;
+				for( int y = 0 ; y < depthHeight ; y++ )
+				{
+					for( int x = 0 ; x < depthWidth ; x++ )
+					{
+						*pOut-- = (int)pBuffer->depth;
+						pBuffer++;
+					}
+					pOut += (depthWidth << 1);
+				}
 			}
-			//USHORT RealDepth;
-			//RealDepth = *pBufferRun++ >> 3;
-			//*pOut-- = (int)RealDepth;
-			*pOut-- = (int)pBuffer->depth;
-			pBuffer++;
-			}
-			pOut += (depthWidth << 1);
-			if(m_person) pOutPerson += (depthWidth << 1);
-			}
-			}
-			m_depthMutex.Unlock();
-			m_depthSemaphore.Signal();  // signal semaphore
-			*/
 			// We're done with the texture so unlock it
 			pTexture->UnlockRect(0);
-			kinectInstance->NuiImageStreamReleaseFrame(hDepthStream, &pImageFrame );
-		}
+			return (img);
 	}
 #pragma endregion
 };
