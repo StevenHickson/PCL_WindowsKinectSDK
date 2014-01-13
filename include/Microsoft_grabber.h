@@ -79,7 +79,6 @@ namespace pcl
 		/*typedef void (sig_cb_microsoft_ir_image) (const boost::shared_ptr<const pcl::PointCloud<pcl::PointXYZI> >&);
 		typedef void (sig_cb_microsoft_point_cloud) (const boost::shared_ptr<const pcl::PointCloud<pcl::PointXYZ> >&);
 		typedef void (sig_cb_microsoft_point_cloud_rgb) (const boost::shared_ptr<const pcl::PointCloud<pcl::PointXYZRGB> >&);
-		typedef void (sig_cb_microsoft_point_cloud_rgba) (const boost::shared_ptr<const pcl::PointCloud<pcl::PointXYZRGBA> >&);
 		typedef void (sig_cb_microsoft_point_cloud_i) (const boost::shared_ptr<const pcl::PointCloud<pcl::PointXYZI> >&);*/
 
 		MicrosoftGrabber (const int instance = 0);
@@ -118,6 +117,8 @@ namespace pcl
 		INuiCoordinateMapper *mapper;
 		bool CameraSettingsSupported;
 
+		void GetPointCloudFromData(const cv::Mat &img, const MatDepth &depth, PointCloud<PointXYZRGBA> &cloud, bool useZeros, bool alignToColor, bool preregistered) const;
+
 		//These should not be called except within the thread by the KinectCapture class process manager
 		void ProcessThreadInternal();
 
@@ -130,6 +131,7 @@ namespace pcl
 		boost::signals2::signal<sig_cb_microsoft_point_cloud_i>* point_cloud_i_signal_;
 		boost::signals2::signal<sig_cb_microsoft_point_cloud_rgb>* point_cloud_rgb_signal_;
 		*/
+		Synchronizer<boost::shared_ptr<cv::Mat>, boost::shared_ptr<MatDepth> > rgb_sync_;
 
 		HANDLE hColorStream, hDepthStream, hInfraredStream;
 		HANDLE hDepthFrameEvent, hColorFrameEvent, hInfraredFrameEvent, hSkeletonEvent, hStopEvent, hKinectThread;
@@ -154,8 +156,11 @@ namespace pcl
 		void StartInfraredCapture();
 		bool GetCameraSettings();
 		
-		boost::shared_ptr<cv::Mat> convertToRGBMat (const NUI_IMAGE_FRAME &color) const;
-		boost::shared_ptr<MatDepth> convertTo32SMat (INuiFrameTexture *texture) const;
+		void imageDepthImageCallback(const boost::shared_ptr<cv::Mat> &image, const boost::shared_ptr<MatDepth> &depth_image);
+		boost::shared_ptr<cv::Mat> convertToRGBMat(const NUI_IMAGE_FRAME &color) const;
+		boost::shared_ptr<MatDepth> convertTo32SMat(INuiFrameTexture *texture) const;
+		boost::shared_ptr<pcl::PointCloud<pcl::PointXYZRGBA> > convertToXYZRGBAPointCloud (const boost::shared_ptr<cv::Mat> &image,
+                               const boost::shared_ptr<MatDepth> &depth_image) const;
 		/** \brief Convert a Depth + RGB image pair to a pcl::PointCloud<PointT>
 		* \param[in] image the RGB image to convert
 		* \param[in] depth_image the depth image to convert

@@ -25,11 +25,27 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307 USA
 using namespace std;
 using namespace cv;
 
+//DEFINES constants for kinect cameras
+#define KINECT_CX_C 3.5094272028759258e+02
+#define KINECT_CY_C 2.4251931828128443e+02
+#define KINECT_FX_C 5.2921508098293293e+02
+#define KINECT_FY_C 5.2556393630057437e+02
+
+
+//I preinvert all the depth focal points so they can be multiplied instead of divided. This is because I'm smart
+#define KINECT_CX_D 3.2330780975300314e+02
+#define KINECT_CY_D 2.4273913761751615e+02
+#define KINECT_FX_D 1.6828944189289601e-03
+#define KINECT_FY_D 1.6919313269589566e-03
+
 DWORD ProcessThread(LPVOID pParam) {
 	pcl::MicrosoftGrabber *p = (pcl::MicrosoftGrabber*) pParam;
 	p->ProcessThreadInternal();
 	return 0;
 }
+
+template <typename T> inline T Clamp(T a, T minn, T maxx)
+{ return (a < minn) ? minn : ( (a > maxx) ? maxx : a ); }
 
 namespace pcl {
 	MicrosoftGrabber::MicrosoftGrabber(const int instance) {
@@ -81,11 +97,13 @@ namespace pcl {
 		// create callback signals
 		image_signal_             = createSignal<sig_cb_microsoft_image> ();
 		depth_image_signal_    = createSignal<sig_cb_microsoft_depth_image> ();
+		point_cloud_rgba_signal_  = createSignal<sig_cb_microsoft_point_cloud_rgba> ();
 		/*ir_image_signal_       = createSignal<sig_cb_microsoft_ir_image> ();
 		point_cloud_signal_    = createSignal<sig_cb_microsoft_point_cloud> ();
 		point_cloud_i_signal_  = createSignal<sig_cb_microsoft_point_cloud_i> ();
 		point_cloud_rgb_signal_   = createSignal<sig_cb_microsoft_point_cloud_rgb> ();
-		point_cloud_rgba_signal_  = createSignal<sig_cb_microsoft_point_cloud_rgba> ();*/
+		*/ 
+		rgb_sync_.addCallback (boost::bind (&MicrosoftGrabber::imageDepthImageCallback, this, _1, _2));
 	}
 
 	void MicrosoftGrabber::start() {
@@ -250,10 +268,14 @@ namespace pcl {
 			throw exception("Could not get next color frame from kinect");
 		}
 		//convert here
+		boost::shared_ptr<Mat> img = convertToRGBMat(pImageFrame);
+		m_rgbTime = pImageFrame.liTimeStamp.QuadPart;
 		if (image_signal_->num_slots () > 0) {
 			//cout << "img signal num slot!" << endl;
-			image_signal_->operator()(convertToRGBMat(pImageFrame));
+			image_signal_->operator()(img);
 		}
+		if (num_slots<sig_cb_microsoft_point_cloud_rgba>   () > 0)
+			rgb_sync_.add0 (img, m_rgbTime);
 		kinectInstance->NuiImageStreamReleaseFrame( hColorStream, &pImageFrame );
 	}
 
@@ -267,7 +289,6 @@ namespace pcl {
 			if ( LockedRect.Pitch != 0 ) //should be in this if statement otherwise erronous info
 			{
 				//mapper->MapColorFrameToDepthFrame(NUI_IMAGE_TYPE_COLOR, colorRes, depthRes, 
-				//m_rgbTime = pImageFrame.liTimeStamp.QuadPart;
 				//Get Image info and put it into new image (weird arithmetic is to flip the image on the fly)
 				BYTE * pBuffer = (BYTE*) LockedRect.pBits;
 				int safeWidth = imgWidth - 1, count = safeWidth, loop = 0, multiplier = (imgWidth << 1) - 1;
@@ -311,11 +332,14 @@ namespace pcl {
 		if ( FAILED( hr ) ) {
 			throw exception("Could not get extended depth data from kinect");
 		}
-
+		boost::shared_ptr<MatDepth> depth_img = convertTo32SMat(pTexture);
+		m_depthTime = pImageFrame.liTimeStamp.QuadPart;
 		if (depth_image_signal_->num_slots () > 0) {
 			//cout << "img signal num slot!" << endl;
-			depth_image_signal_->operator()(convertTo32SMat(pTexture));
+			depth_image_signal_->operator()(depth_img);
 		}
+		if (num_slots<sig_cb_microsoft_point_cloud_rgba>   () > 0)
+			rgb_sync_.add1 (depth_img, m_depthTime);
 		kinectInstance->NuiImageStreamReleaseFrame(hDepthStream, &pImageFrame );
 	}
 
@@ -326,7 +350,6 @@ namespace pcl {
 			boost::shared_ptr<MatDepth> img ((MatDepth*)(new Mat(depthHeight,depthWidth,CV_32S)));
 			if ( LockedRect.Pitch != 0 )
 			{
-				//m_depthTime = pImageFrame.liTimeStamp.QuadPart;
 				Mat_<int>::iterator pOut = img->begin<int>();
 				pOut += depthWidth - 1;
 				NUI_DEPTH_IMAGE_PIXEL *pBuffer =  (NUI_DEPTH_IMAGE_PIXEL *) LockedRect.pBits;
@@ -345,5 +368,110 @@ namespace pcl {
 			img->addref(); //I have to do this or OpenCV will try to release the Mat too early. I'm not sure why
 			return (img);
 	}
+#pragma endregion
+
+#pragma region Cloud
+	void MicrosoftGrabber::imageDepthImageCallback (const boost::shared_ptr<Mat> &image,
+		const boost::shared_ptr<MatDepth> &depth_image)
+	{
+		// check if we have color point cloud slots
+		if (point_cloud_rgba_signal_->num_slots () > 0)
+			point_cloud_rgba_signal_->operator()(convertToXYZRGBAPointCloud(image, depth_image));
+	}
+
+	void MicrosoftGrabber::GetPointCloudFromData(const Mat &img, const MatDepth &depth, PointCloud<PointXYZRGBA> &cloud, bool useZeros, bool alignToColor, bool preregistered) const
+	{
+		assert(!img.empty() && !depth.empty());
+
+		PointCloud<PointXYZRGBA>::iterator pCloud = cloud.begin();
+		Mat_<int>::const_iterator pDepth = depth.begin<int>();
+		int safeWidth = img.cols - 1, safeHeight = img.rows - 1, safeDepthWidth = depthWidth - 1, safeDepthHeight = depthHeight - 1;
+		float cx_d = KINECT_CX_D, cy_d = KINECT_CY_D;
+		bool res_320 = (depthWidth == 320);
+		for(int j = 0; j < depthHeight; j++) {
+			for(int i = 0; i < depthWidth; i++) {
+				PointXYZRGBA loc;
+				Vec3b color;
+				LONG x = res_320 ? i: i >> 1, y = res_320 ? j : j >> 1;
+				if(!preregistered) {
+					kinectInstance->NuiImageGetColorPixelCoordinatesFromDepthPixel(colorRes,NULL,LONG(320-x),LONG(y),(*pDepth)<<3,&x,&y);
+					x = Clamp<int>(safeWidth-x,0,safeWidth);
+					y = Clamp<int>(y,0,safeHeight);
+					color = img.at<Vec3b>(y,x);
+				} else
+					color = img.at<Vec3b>(j,i);
+				loc.b = color[0];
+				loc.g = color[1];
+				loc.r = color[2];
+				loc.a = 255;
+				if(useZeros && *pDepth == 0) {
+					loc.x = float(((float)i - cx_d) * KINECT_FX_D);
+					if(preregistered)
+						loc.y = float(((float)j - cy_d) * KINECT_FY_D);
+					else
+						loc.y = float(((float)(safeDepthHeight - j) - cy_d) * KINECT_FY_D);
+					loc.z = 0;
+				} else {
+					const double newDepth = (*pDepth * 0.001f); //convert from millimeters to meters
+					loc.x = float(((float)i - cx_d) * newDepth * KINECT_FX_D);
+					if(preregistered)
+						loc.y = float(((float)j - cy_d) * newDepth * KINECT_FY_D);
+					else
+						loc.y = float(((float)(safeDepthHeight - j) - cy_d) * newDepth * KINECT_FY_D);
+					loc.z = float(newDepth);
+				}
+				//cout << "Iter: " << i << ", " << j << endl;
+				if(!preregistered && alignToColor) {
+					cloud(x,y) = loc;
+					//for weird resolution differences
+					if(imgWidth == depthWidth << 1) {
+						//TOBE DONE LATER
+						/*float x_add = loc.z * KINECT_FX_D, y_add = loc.z * KINECT_FY_D;
+						if(y + 1 < imgHeight)
+						cloud->Set(Point3D<Bgr>(loc.x,loc.y + y_add,loc.z,img(x,y+1),*pDepth!=0),x + (y + 1) * img.Width());
+						if(x + 1 < imgWidth)
+						cloud->Set(Point3D<Bgr>(loc.x + x_add,loc.y,loc.z,img(x+1,y),*pDepth!=0),x + 1 + y * img.Width());
+						if(y + 1 < imgHeight && x + 1 < imgWidth)
+						cloud->Set(Point3D<Bgr>(loc.x + x_add,loc.y + y_add,loc.z,img(x+1,y+1),*pDepth!=0),x + 1 + (y + 1) * img.Width());*/
+					}
+				} else {
+					*pCloud = loc;
+				}
+				++pDepth; ++pCloud;
+			}
+		}
+		if(!preregistered && alignToColor) {
+			pCloud = cloud.begin();
+			Mat_<Vec3b>::const_iterator pColor = img.begin<Vec3b>();
+			while(pCloud != cloud.end()) {
+				if(pCloud->z == 0) {
+					pCloud->b = (*pColor)[0];
+					pCloud->g = (*pColor)[1];
+					pCloud->r = (*pColor)[2];
+					pCloud->a = 255;
+				}
+				++pCloud; ++pColor;
+			}
+		}		
+	}
+
+	boost::shared_ptr<pcl::PointCloud<pcl::PointXYZRGBA>> MicrosoftGrabber::convertToXYZRGBAPointCloud (const boost::shared_ptr<cv::Mat> &image,
+		const boost::shared_ptr<MatDepth> &depth_image) const {
+			boost::shared_ptr<PointCloud<PointXYZRGBA> > cloud (new PointCloud<PointXYZRGBA>);
+
+			cloud->header.frame_id =  "/microsoft_rgb_optical_frame";
+			cloud->height = std::max (imgHeight, depthHeight);
+			cloud->width = std::max (imgWidth, depthWidth);
+			cloud->is_dense = false;
+			cloud->points.resize (cloud->height * cloud->width);
+			GetPointCloudFromData(*image,*depth_image,*cloud,true,false,false);
+			cloud->sensor_origin_.setZero ();
+			cloud->sensor_orientation_.w () = 1.0;
+			cloud->sensor_orientation_.x () = 0.0;
+			cloud->sensor_orientation_.y () = 0.0;
+			cloud->sensor_orientation_.z () = 0.0;
+			return (cloud);
+	}
+
 #pragma endregion
 };

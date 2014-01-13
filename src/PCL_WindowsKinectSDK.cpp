@@ -22,7 +22,7 @@ using namespace cv;
 class SimpleMicrosoftViewer
 {
 public:
-	//SimpleMicrosoftViewer () : viewer ("PCL Microsoft Viewer") {}
+	SimpleMicrosoftViewer () : viewer ("PCL Microsoft Viewer") {}
 
 	void img_cb_ (const boost::shared_ptr<const cv::Mat> &img)
 	{
@@ -39,6 +39,12 @@ public:
 		imshow("depth", *img);
 		waitKey(1);
 	}
+
+	void cloud_cb_ (const pcl::PointCloud<pcl::PointXYZRGBA>::ConstPtr &cloud)
+     {
+       if (!viewer.wasStopped())
+         viewer.showCloud (cloud);
+     }
 
 	/*void cloud_cb_ (const pcl::PointCloud<pcl::PointXYZRGB>::ConstPtr &cloud)
 	{
@@ -63,13 +69,16 @@ public:
 			boost::bind (&SimpleMicrosoftViewer::depth_cb_, this, _1);
 		boost::function<void (const boost::shared_ptr<const Mat>&)> f =
 			boost::bind (&SimpleMicrosoftViewer::img_cb_, this, _1);
+		boost::function<void (const pcl::PointCloud<pcl::PointXYZRGBA>::ConstPtr&)> f3 =
+			boost::bind (&SimpleMicrosoftViewer::cloud_cb_, this, _1);
 
+		my_interface->registerCallback (f3);
 		my_interface->registerCallback (f);
 		my_interface->registerCallback (f2);
 
 		my_interface->start ();
 		Sleep(30);
-		while (true)
+		while (!viewer.wasStopped())
 		{
 			boost::this_thread::sleep (boost::posix_time::seconds (1));
 		}
@@ -77,7 +86,7 @@ public:
 		my_interface->stop ();
 	}
 
-	//pcl::visualization::CloudViewer viewer;
+	pcl::visualization::CloudViewer viewer;
 };
 
 int
