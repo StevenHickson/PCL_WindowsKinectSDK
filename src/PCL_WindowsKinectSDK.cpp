@@ -3,6 +3,8 @@
 #include <pcl/point_types.h>
 #include <pcl/point_cloud.h>
 #include <pcl/common/time.h>
+#include <pcl/features/integral_image_normal.h>
+#include <pcl/visualization/cloud_viewer.h>
 
 #include "Microsoft_grabber.h"
 #include <pcl/visualization/cloud_viewer.h>
@@ -22,42 +24,39 @@ using namespace cv;
 class SimpleMicrosoftViewer
 {
 public:
-	SimpleMicrosoftViewer () : viewer ("PCL Microsoft Viewer") {}
+	SimpleMicrosoftViewer () : viewer(new pcl::visualization::PCLVisualizer ("PCL Microsoft Viewer")), normals(new pcl::PointCloud<pcl::Normal>), sharedCloud(new pcl::PointCloud<pcl::PointXYZRGBA>), first(false), update(false) {}
 
 	void img_cb_ (const boost::shared_ptr<const cv::Mat> &img)
 	{
-		/*if (!viewer.wasStopped())
-			viewer.showCloud (cloud);*/
 		imshow("image", *img);
 		waitKey(1);
 	}
 
 	void depth_cb_ (const boost::shared_ptr<const MatDepth> &img) 
 	{
-		/*if (!viewer.wasStopped())
-			viewer.showCloud (cloud);*/
 		imshow("depth", *img);
 		waitKey(1);
 	}
 
 	void cloud_cb_ (const pcl::PointCloud<pcl::PointXYZRGBA>::ConstPtr &cloud)
-     {
-       if (!viewer.wasStopped())
-         viewer.showCloud (cloud);
-     }
-
-	/*void cloud_cb_ (const pcl::PointCloud<pcl::PointXYZRGB>::ConstPtr &cloud)
 	{
-		static unsigned count = 0;
-		static double last = pcl::getTime ();
-		if (++count == 30)
-		{
-			double now = pcl::getTime ();
-			std::cout << "distance of center pixel :" << cloud->points [(cloud->width >> 1) * (cloud->height + 1)].z << " mm. Average framerate: " << double(count)/double(now - last) << " Hz" <<  std::endl;
-			count = 0;
-			last = now;
+		/*if (!viewer.wasStopped())
+		viewer.showCloud (cloud);*/
+		// estimate normals
+		if(!cloud->empty()) {
+			normalMutex.lock();
+			copyPointCloud(*cloud,*sharedCloud);
+			pcl::IntegralImageNormalEstimation<pcl::PointXYZRGBA, pcl::Normal> ne;
+			ne.setNormalEstimationMethod (ne.AVERAGE_3D_GRADIENT);
+			ne.setMaxDepthChangeFactor(0.02f);
+			ne.setNormalSmoothingSize(10.0f);
+			ne.setInputCloud(cloud);
+			ne.compute(*normals);
+			//sharedCloud = cloud;
+			update = true;
+			normalMutex.unlock();
 		}
-	}*/
+	}
 
 	void run ()
 	{
@@ -66,9 +65,9 @@ public:
 
 		// make callback function from member function
 		boost::function<void (const boost::shared_ptr<const MatDepth>&)> f2 =
-			boost::bind (&SimpleMicrosoftViewer::depth_cb_, this, _1);
+		boost::bind (&SimpleMicrosoftViewer::depth_cb_, this, _1);
 		boost::function<void (const boost::shared_ptr<const Mat>&)> f =
-			boost::bind (&SimpleMicrosoftViewer::img_cb_, this, _1);
+		boost::bind (&SimpleMicrosoftViewer::img_cb_, this, _1);
 		boost::function<void (const pcl::PointCloud<pcl::PointXYZRGBA>::ConstPtr&)> f3 =
 			boost::bind (&SimpleMicrosoftViewer::cloud_cb_, this, _1);
 
@@ -76,17 +75,51 @@ public:
 		my_interface->registerCallback (f);
 		my_interface->registerCallback (f2);
 
+		//viewer.setBackgroundColor(0.0, 0.0, 0.5);
 		my_interface->start ();
 		Sleep(30);
-		while (!viewer.wasStopped())
+		while (!viewer->wasStopped())
 		{
-			boost::this_thread::sleep (boost::posix_time::seconds (1));
+			normalMutex.lock();
+			if(update) {
+				viewer->removePointCloud("cloud");
+				viewer->removePointCloud("original");
+				viewer->addPointCloud(sharedCloud,"original");
+				viewer->addPointCloudNormals<pcl::PointXYZRGBA,pcl::Normal>(sharedCloud, normals);
+				update = false;
+			}
+			viewer->spinOnce();
+			normalMutex.unlock();
 		}
 
 		my_interface->stop ();
 	}
 
-	pcl::visualization::CloudViewer viewer;
+	void run2() {
+		// estimate normals
+		PointCloud<PointXYZRGBA>::Ptr cloud(new PointCloud<PointXYZRGBA>());
+		pcl::io::loadPCDFile("C:/Users/Steve/Documents/test.pcd",*cloud);
+		pcl::PointCloud<pcl::Normal>::Ptr normals (new pcl::PointCloud<pcl::Normal>);
+
+		pcl::IntegralImageNormalEstimation<pcl::PointXYZRGBA, pcl::Normal> ne;
+		ne.setNormalEstimationMethod (ne.AVERAGE_3D_GRADIENT);
+		ne.setMaxDepthChangeFactor(0.02f);
+		ne.setNormalSmoothingSize(10.0f);
+		ne.setInputCloud(cloud);
+		ne.compute(*normals);
+
+		// visualize normals
+		//viewer.addPointCloud<PointXYZRGBA>(cloud,"original");
+		viewer->addPointCloudNormals<pcl::PointXYZRGBA,pcl::Normal>(cloud, normals);
+		while (!viewer->wasStopped())
+			viewer->spinOnce(100);
+	}
+
+	boost::shared_ptr<pcl::PointCloud<pcl::Normal>> normals;
+	boost::shared_ptr<pcl::PointCloud<pcl::PointXYZRGBA>> sharedCloud;
+	boost::shared_ptr<pcl::visualization::PCLVisualizer> viewer;
+	bool first, update;
+	boost::mutex normalMutex;
 };
 
 int
@@ -97,7 +130,7 @@ int
 	PointCloud<PointXYZRGB> cloud;
 	try {
 		SimpleMicrosoftViewer v;
-		v.run ();
+		v.run();
 	} catch (pcl::PCLException e) {
 		cout << e.detailedMessage() << endl;
 	} catch (std::exception &e) {

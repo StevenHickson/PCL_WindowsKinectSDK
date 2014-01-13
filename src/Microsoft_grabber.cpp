@@ -379,15 +379,16 @@ namespace pcl {
 			point_cloud_rgba_signal_->operator()(convertToXYZRGBAPointCloud(image, depth_image));
 	}
 
-	void MicrosoftGrabber::GetPointCloudFromData(const Mat &img, const MatDepth &depth, PointCloud<PointXYZRGBA> &cloud, bool useZeros, bool alignToColor, bool preregistered) const
+	void MicrosoftGrabber::GetPointCloudFromData(const boost::shared_ptr<Mat> &img, const boost::shared_ptr<MatDepth> &depth, boost::shared_ptr<PointCloud<PointXYZRGBA>> &cloud, bool useZeros, bool alignToColor, bool preregistered) const
 	{
-		assert(!img.empty() && !depth.empty());
+		assert(!img->empty() && !depth->empty());
 
-		PointCloud<PointXYZRGBA>::iterator pCloud = cloud.begin();
-		Mat_<int>::const_iterator pDepth = depth.begin<int>();
-		int safeWidth = img.cols - 1, safeHeight = img.rows - 1, safeDepthWidth = depthWidth - 1, safeDepthHeight = depthHeight - 1;
+		PointCloud<PointXYZRGBA>::iterator pCloud = cloud->begin();
+		Mat_<int>::const_iterator pDepth = depth->begin<int>();
+		int safeWidth = img->cols - 1, safeHeight = img->rows - 1, safeDepthWidth = depthWidth - 1, safeDepthHeight = depthHeight - 1;
 		float cx_d = KINECT_CX_D, cy_d = KINECT_CY_D;
 		bool res_320 = (depthWidth == 320);
+		float bad_point = std::numeric_limits<float>::quiet_NaN ();
 		for(int j = 0; j < depthHeight; j++) {
 			for(int i = 0; i < depthWidth; i++) {
 				PointXYZRGBA loc;
@@ -397,20 +398,20 @@ namespace pcl {
 					kinectInstance->NuiImageGetColorPixelCoordinatesFromDepthPixel(colorRes,NULL,LONG(320-x),LONG(y),(*pDepth)<<3,&x,&y);
 					x = Clamp<int>(safeWidth-x,0,safeWidth);
 					y = Clamp<int>(y,0,safeHeight);
-					color = img.at<Vec3b>(y,x);
+					color = img->at<Vec3b>(y,x);
 				} else
-					color = img.at<Vec3b>(j,i);
+					color = img->at<Vec3b>(j,i);
 				loc.b = color[0];
 				loc.g = color[1];
 				loc.r = color[2];
 				loc.a = 255;
-				if(useZeros && *pDepth == 0) {
-					loc.x = float(((float)i - cx_d) * KINECT_FX_D);
+				if(*pDepth == 0) {
+					/*loc.x = float(((float)i - cx_d) * KINECT_FX_D);
 					if(preregistered)
 						loc.y = float(((float)j - cy_d) * KINECT_FY_D);
 					else
-						loc.y = float(((float)(safeDepthHeight - j) - cy_d) * KINECT_FY_D);
-					loc.z = 0;
+						loc.y = float(((float)(safeDepthHeight - j) - cy_d) * KINECT_FY_D);*/
+					loc.x = loc.y = loc.z = bad_point;
 				} else {
 					const double newDepth = (*pDepth * 0.001f); //convert from millimeters to meters
 					loc.x = float(((float)i - cx_d) * newDepth * KINECT_FX_D);
@@ -422,7 +423,7 @@ namespace pcl {
 				}
 				//cout << "Iter: " << i << ", " << j << endl;
 				if(!preregistered && alignToColor) {
-					cloud(x,y) = loc;
+					(*cloud)(x,y) = loc;
 					//for weird resolution differences
 					if(imgWidth == depthWidth << 1) {
 						//TOBE DONE LATER
@@ -441,9 +442,9 @@ namespace pcl {
 			}
 		}
 		if(!preregistered && alignToColor) {
-			pCloud = cloud.begin();
-			Mat_<Vec3b>::const_iterator pColor = img.begin<Vec3b>();
-			while(pCloud != cloud.end()) {
+			pCloud = cloud->begin();
+			Mat_<Vec3b>::const_iterator pColor = img->begin<Vec3b>();
+			while(pCloud != cloud->end()) {
 				if(pCloud->z == 0) {
 					pCloud->b = (*pColor)[0];
 					pCloud->g = (*pColor)[1];
@@ -464,7 +465,7 @@ namespace pcl {
 			cloud->width = std::max (imgWidth, depthWidth);
 			cloud->is_dense = false;
 			cloud->points.resize (cloud->height * cloud->width);
-			GetPointCloudFromData(*image,*depth_image,*cloud,true,false,false);
+			GetPointCloudFromData(image,depth_image,cloud,true,false,false);
 			cloud->sensor_origin_.setZero ();
 			cloud->sensor_orientation_.w () = 1.0;
 			cloud->sensor_orientation_.x () = 0.0;

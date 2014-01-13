@@ -117,7 +117,7 @@ namespace pcl
 		INuiCoordinateMapper *mapper;
 		bool CameraSettingsSupported;
 
-		void GetPointCloudFromData(const cv::Mat &img, const MatDepth &depth, PointCloud<PointXYZRGBA> &cloud, bool useZeros, bool alignToColor, bool preregistered) const;
+		void GetPointCloudFromData(const boost::shared_ptr<cv::Mat> &img, const boost::shared_ptr<MatDepth> &depth, boost::shared_ptr<PointCloud<PointXYZRGBA>> &cloud, bool useZeros, bool alignToColor, bool preregistered) const;
 
 		//These should not be called except within the thread by the KinectCapture class process manager
 		void ProcessThreadInternal();
