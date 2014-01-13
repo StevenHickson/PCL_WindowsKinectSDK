@@ -32,6 +32,14 @@ public:
 		waitKey(1);
 	}
 
+	void depth_cb_ (const boost::shared_ptr<const MatDepth> &img) 
+	{
+		/*if (!viewer.wasStopped())
+			viewer.showCloud (cloud);*/
+		imshow("depth", *img);
+		waitKey(1);
+	}
+
 	/*void cloud_cb_ (const pcl::PointCloud<pcl::PointXYZRGB>::ConstPtr &cloud)
 	{
 		static unsigned count = 0;
@@ -51,10 +59,13 @@ public:
 		pcl::Grabber* my_interface = new pcl::MicrosoftGrabber();
 
 		// make callback function from member function
-		boost::function<void (const boost::shared_ptr<const Mat_<Vec3b>>&)> f =
+		boost::function<void (const boost::shared_ptr<const MatDepth>&)> f2 =
+			boost::bind (&SimpleMicrosoftViewer::depth_cb_, this, _1);
+		boost::function<void (const boost::shared_ptr<const Mat>&)> f =
 			boost::bind (&SimpleMicrosoftViewer::img_cb_, this, _1);
 
 		my_interface->registerCallback (f);
+		my_interface->registerCallback (f2);
 
 		my_interface->start ();
 		Sleep(30);

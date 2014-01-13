@@ -319,11 +319,11 @@ namespace pcl {
 		kinectInstance->NuiImageStreamReleaseFrame(hDepthStream, &pImageFrame );
 	}
 
-	boost::shared_ptr<cv::Mat>
+	boost::shared_ptr<MatDepth>
 		MicrosoftGrabber::convertTo32SMat (INuiFrameTexture *pTexture) const {
 			NUI_LOCKED_RECT LockedRect;
 			pTexture->LockRect( 0, &LockedRect, NULL, 0 );
-			boost::shared_ptr<Mat> img (new Mat(depthHeight,depthWidth,CV_32S));
+			boost::shared_ptr<MatDepth> img ((MatDepth*)(new Mat(depthHeight,depthWidth,CV_32S)));
 			if ( LockedRect.Pitch != 0 )
 			{
 				//m_depthTime = pImageFrame.liTimeStamp.QuadPart;
@@ -342,6 +342,7 @@ namespace pcl {
 			}
 			// We're done with the texture so unlock it
 			pTexture->UnlockRect(0);
+			img->addref(); //I have to do this or OpenCV will try to release the Mat too early. I'm not sure why
 			return (img);
 	}
 #pragma endregion

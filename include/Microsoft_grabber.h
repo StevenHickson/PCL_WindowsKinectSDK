@@ -54,9 +54,7 @@ namespace pcl
 	struct PointXYZRGBA;
 	struct PointXYZI;
 	template <typename T> class PointCloud;
-	struct ImgRGB {
-		cv::Mat img;
-	};
+	class MatDepth : public cv::Mat { }; //I have to use this to get around the assuming code in registerCallback in grabber.h
 
 	/** \brief Grabber for OpenNI devices (i.e., Primesense PSDK, Microsoft Kinect, Asus XTion Pro/Live)
 	* \author Nico Blodow <blodow@cs.tum.edu>, Suat Gedikli <gedikli@willowgarage.com>
@@ -76,7 +74,8 @@ namespace pcl
 
 		//define callback signature typedefs
 		typedef void (sig_cb_microsoft_image) (const boost::shared_ptr<const cv::Mat> &);
-		typedef void (sig_cb_microsoft_depth_image) (const boost::shared_ptr<const cv::Mat> &);
+		typedef void (sig_cb_microsoft_depth_image) (const boost::shared_ptr<const MatDepth> &);
+		typedef void (sig_cb_microsoft_point_cloud_rgba) (const boost::shared_ptr<const pcl::PointCloud<pcl::PointXYZRGBA> >&);
 		/*typedef void (sig_cb_microsoft_ir_image) (const boost::shared_ptr<const pcl::PointCloud<pcl::PointXYZI> >&);
 		typedef void (sig_cb_microsoft_point_cloud) (const boost::shared_ptr<const pcl::PointCloud<pcl::PointXYZ> >&);
 		typedef void (sig_cb_microsoft_point_cloud_rgb) (const boost::shared_ptr<const pcl::PointCloud<pcl::PointXYZRGB> >&);
@@ -125,11 +124,12 @@ namespace pcl
 	protected:
 		boost::signals2::signal<sig_cb_microsoft_image>* image_signal_;
 		boost::signals2::signal<sig_cb_microsoft_depth_image>* depth_image_signal_;
+		boost::signals2::signal<sig_cb_microsoft_point_cloud_rgba>* point_cloud_rgba_signal_;
 		/*boost::signals2::signal<sig_cb_microsoft_ir_image>* ir_image_signal_;
 		boost::signals2::signal<sig_cb_microsoft_point_cloud>* point_cloud_signal_;
 		boost::signals2::signal<sig_cb_microsoft_point_cloud_i>* point_cloud_i_signal_;
 		boost::signals2::signal<sig_cb_microsoft_point_cloud_rgb>* point_cloud_rgb_signal_;
-		boost::signals2::signal<sig_cb_microsoft_point_cloud_rgba>* point_cloud_rgba_signal_;*/
+		*/
 
 		HANDLE hColorStream, hDepthStream, hInfraredStream;
 		HANDLE hDepthFrameEvent, hColorFrameEvent, hInfraredFrameEvent, hSkeletonEvent, hStopEvent, hKinectThread;
@@ -155,7 +155,7 @@ namespace pcl
 		bool GetCameraSettings();
 		
 		boost::shared_ptr<cv::Mat> convertToRGBMat (const NUI_IMAGE_FRAME &color) const;
-		boost::shared_ptr<cv::Mat> convertTo32SMat (INuiFrameTexture *texture) const;
+		boost::shared_ptr<MatDepth> convertTo32SMat (INuiFrameTexture *texture) const;
 		/** \brief Convert a Depth + RGB image pair to a pcl::PointCloud<PointT>
 		* \param[in] image the RGB image to convert
 		* \param[in] depth_image the depth image to convert
