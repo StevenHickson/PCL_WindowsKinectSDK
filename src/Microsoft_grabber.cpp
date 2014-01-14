@@ -98,6 +98,7 @@ namespace pcl {
 		image_signal_             = createSignal<sig_cb_microsoft_image> ();
 		depth_image_signal_    = createSignal<sig_cb_microsoft_depth_image> ();
 		point_cloud_rgba_signal_  = createSignal<sig_cb_microsoft_point_cloud_rgba> ();
+		all_data_signal_  = createSignal<sig_cb_microsoft_all_data> ();
 		/*ir_image_signal_       = createSignal<sig_cb_microsoft_ir_image> ();
 		point_cloud_signal_    = createSignal<sig_cb_microsoft_point_cloud> ();
 		point_cloud_i_signal_  = createSignal<sig_cb_microsoft_point_cloud_i> ();
@@ -274,7 +275,7 @@ namespace pcl {
 			//cout << "img signal num slot!" << endl;
 			image_signal_->operator()(img);
 		}
-		if (num_slots<sig_cb_microsoft_point_cloud_rgba>   () > 0)
+		if (num_slots<sig_cb_microsoft_point_cloud_rgba>() > 0 || all_data_signal_->num_slots() > 0)
 			rgb_sync_.add0 (img, m_rgbTime);
 		kinectInstance->NuiImageStreamReleaseFrame( hColorStream, &pImageFrame );
 	}
@@ -338,7 +339,7 @@ namespace pcl {
 			//cout << "img signal num slot!" << endl;
 			depth_image_signal_->operator()(depth_img);
 		}
-		if (num_slots<sig_cb_microsoft_point_cloud_rgba>   () > 0)
+		if (num_slots<sig_cb_microsoft_point_cloud_rgba>() > 0 || all_data_signal_->num_slots() > 0)
 			rgb_sync_.add1 (depth_img, m_depthTime);
 		kinectInstance->NuiImageStreamReleaseFrame(hDepthStream, &pImageFrame );
 	}
@@ -374,9 +375,16 @@ namespace pcl {
 	void MicrosoftGrabber::imageDepthImageCallback (const boost::shared_ptr<Mat> &image,
 		const boost::shared_ptr<MatDepth> &depth_image)
 	{
+		boost::shared_ptr<PointCloud<PointXYZRGBA>> cloud;
 		// check if we have color point cloud slots
+		if(point_cloud_rgba_signal_->num_slots() > 0 || all_data_signal_->num_slots() > 0)
+			cloud = convertToXYZRGBAPointCloud(image, depth_image);
 		if (point_cloud_rgba_signal_->num_slots () > 0)
-			point_cloud_rgba_signal_->operator()(convertToXYZRGBAPointCloud(image, depth_image));
+			point_cloud_rgba_signal_->operator()(cloud);
+		if(all_data_signal_->num_slots() > 0) {
+			boost::shared_ptr<KinectData> data (new KinectData(*image,*depth_image,*cloud));
+			all_data_signal_->operator()(data);
+		}
 	}
 
 	void MicrosoftGrabber::GetPointCloudFromData(const boost::shared_ptr<Mat> &img, const boost::shared_ptr<MatDepth> &depth, boost::shared_ptr<PointCloud<PointXYZRGBA>> &cloud, bool useZeros, bool alignToColor, bool preregistered) const

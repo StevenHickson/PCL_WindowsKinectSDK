@@ -26,31 +26,22 @@ class SimpleMicrosoftViewer
 public:
 	SimpleMicrosoftViewer () : viewer(new pcl::visualization::PCLVisualizer ("PCL Microsoft Viewer")), normals(new pcl::PointCloud<pcl::Normal>), sharedCloud(new pcl::PointCloud<pcl::PointXYZRGBA>), first(false), update(false) {}
 
-	void img_cb_ (const boost::shared_ptr<const cv::Mat> &img)
-	{
-		imshow("image", *img);
-		waitKey(1);
-	}
-
-	void depth_cb_ (const boost::shared_ptr<const MatDepth> &img) 
-	{
-		imshow("depth", *img);
-		waitKey(1);
-	}
-
-	void cloud_cb_ (const pcl::PointCloud<pcl::PointXYZRGBA>::ConstPtr &cloud)
+	void cloud_cb_ (const boost::shared_ptr<const KinectData> &data)
 	{
 		/*if (!viewer.wasStopped())
 		viewer.showCloud (cloud);*/
 		// estimate normals
-		if(!cloud->empty()) {
+		imshow("image", data->image);
+		imshow("depth", data->depth);
+		waitKey(1);
+		if(!data->cloud.empty()) {
 			normalMutex.lock();
-			copyPointCloud(*cloud,*sharedCloud);
+			copyPointCloud(data->cloud,*sharedCloud);
 			pcl::IntegralImageNormalEstimation<pcl::PointXYZRGBA, pcl::Normal> ne;
 			ne.setNormalEstimationMethod (ne.AVERAGE_3D_GRADIENT);
 			ne.setMaxDepthChangeFactor(0.02f);
 			ne.setNormalSmoothingSize(10.0f);
-			ne.setInputCloud(cloud);
+			ne.setInputCloud(sharedCloud);
 			ne.compute(*normals);
 			//sharedCloud = cloud;
 			update = true;
@@ -64,16 +55,10 @@ public:
 		pcl::Grabber* my_interface = new pcl::MicrosoftGrabber();
 
 		// make callback function from member function
-		boost::function<void (const boost::shared_ptr<const MatDepth>&)> f2 =
-		boost::bind (&SimpleMicrosoftViewer::depth_cb_, this, _1);
-		boost::function<void (const boost::shared_ptr<const Mat>&)> f =
-		boost::bind (&SimpleMicrosoftViewer::img_cb_, this, _1);
-		boost::function<void (const pcl::PointCloud<pcl::PointXYZRGBA>::ConstPtr&)> f3 =
-			boost::bind (&SimpleMicrosoftViewer::cloud_cb_, this, _1);
+		boost::function<void (const boost::shared_ptr<const KinectData>&)> f =
+		boost::bind (&SimpleMicrosoftViewer::cloud_cb_, this, _1);
 
-		my_interface->registerCallback (f3);
 		my_interface->registerCallback (f);
-		my_interface->registerCallback (f2);
 
 		//viewer.setBackgroundColor(0.0, 0.0, 0.5);
 		my_interface->start ();
