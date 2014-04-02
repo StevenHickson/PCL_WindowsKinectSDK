@@ -1,3 +1,5 @@
+#define HAVE_OPENCV
+
 #include <iostream>
 #include <pcl/io/pcd_io.h>
 #include <pcl/point_types.h>
@@ -5,6 +7,7 @@
 #include <pcl/common/time.h>
 #include <pcl/features/integral_image_normal.h>
 #include <pcl/visualization/cloud_viewer.h>
+#include <pcl/gpu/kinfu/kinfu.h>
 
 #include "Microsoft_grabber.h"
 #include <pcl/visualization/cloud_viewer.h>
@@ -31,6 +34,7 @@ public:
 		/*if (!viewer.wasStopped())
 		viewer.showCloud (cloud);*/
 		// estimate normals
+		pcl::gpu::KinfuTracker kinfu;
 		imshow("image", data->image);
 		imshow("depth", data->depth);
 		waitKey(1);
@@ -100,8 +104,8 @@ public:
 			viewer->spinOnce(100);
 	}
 
-	boost::shared_ptr<pcl::PointCloud<pcl::Normal>> normals;
-	boost::shared_ptr<pcl::PointCloud<pcl::PointXYZRGBA>> sharedCloud;
+	boost::shared_ptr<pcl::PointCloud<pcl::Normal> > normals;
+	boost::shared_ptr<pcl::PointCloud<pcl::PointXYZRGBA> > sharedCloud;
 	boost::shared_ptr<pcl::visualization::PCLVisualizer> viewer;
 	bool first, update;
 	boost::mutex normalMutex;
